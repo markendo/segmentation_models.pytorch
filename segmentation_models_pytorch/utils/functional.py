@@ -1,4 +1,5 @@
 import torch
+import numpy as np
 
 
 def _take_channels(*xs, ignore_channels=None):
@@ -33,7 +34,24 @@ def iou(pr, gt, eps=1e-7, threshold=None, ignore_channels=None):
 
     intersection = torch.sum(gt * pr)
     union = torch.sum(gt) + torch.sum(pr) - intersection + eps
+    # print("Iou:", ((intersection + eps) / union).cpu().detach().numpy(), "Intersection:", intersection.cpu().detach().numpy(), "Union:", union.cpu().detach().numpy())
     return (intersection + eps) / union
+
+def my_iou(pr, gt, iou, threshold=None):
+    """Calculate Intersection over Union between ground truth and prediction
+    Args:
+        pr (torch.Tensor): predicted tensor
+        gt (torch.Tensor):  ground truth tensor
+        eps (float): epsilon to avoid zero division
+    Returns:
+        float: IoU (Jaccard) score
+    """
+    pr = _threshold(pr, threshold=threshold)
+    # print(pr.size(), gt.size())
+    intersection = torch.sum(gt * pr, dim=(0, 2, 3)).cpu().detach().numpy()
+    union = torch.sum(gt, dim=(0, 2, 3)).cpu().detach().numpy() + torch.sum(pr, dim=(0, 2, 3)).cpu().detach().numpy() - intersection
+    # print("intersection:", intersection, "union:", union)
+    return (iou[0] + intersection, iou[1] + union)
 
 
 jaccard = iou

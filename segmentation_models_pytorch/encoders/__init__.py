@@ -15,6 +15,8 @@ from .timm_efficientnet import timm_efficientnet_encoders
 
 from ._preprocessing import preprocess_input
 
+import torch
+
 encoders = {}
 encoders.update(resnet_encoders)
 encoders.update(dpn_encoders)
@@ -36,9 +38,17 @@ def get_encoder(name, in_channels=3, depth=5, weights=None):
     encoder = Encoder(**params)
 
     if weights is not None:
-        settings = encoders[name]["pretrained_settings"][weights]
-        encoder.load_state_dict(model_zoo.load_url(settings["url"]))
-
+        if weights not in ['imagenet', 'ssl', 'swsl', 'instagram', 'advprop', 'noisy-student']: #custom encoder weights
+            state_dict = torch.load(weights)
+            state_dict = state_dict['state_dict']
+            for key in list(state_dict.keys()):
+                new_key = key.replace('model.model.', '')
+                state_dict[new_key] = state_dict[key]
+                del state_dict[key]
+        else:
+            settings = encoders[name]["pretrained_settings"][weights]
+            state_dict = model_zoo.load_url(settings["url"])
+        encoder.load_state_dict(state_dict)
     encoder.set_in_channels(in_channels)
 
     return encoder
@@ -49,17 +59,25 @@ def get_encoder_names():
 
 
 def get_preprocessing_params(encoder_name, pretrained="imagenet"):
-    settings = encoders[encoder_name]["pretrained_settings"]
-
-    if pretrained not in settings.keys():
-        raise ValueError("Avaliable pretrained options {}".format(settings.keys()))
-
-    formatted_settings = {}
-    formatted_settings["input_space"] = settings[pretrained].get("input_space")
-    formatted_settings["input_range"] = settings[pretrained].get("input_range")
-    formatted_settings["mean"] = settings[pretrained].get("mean")
-    formatted_settings["std"] = settings[pretrained].get("std")
-    return formatted_settings
+    if pretrained is None:
+        raise ValueError("Must have encoder weights")
+    elif pretrained in ['imagenet', 'ssl', 'swsl', 'instagram', 'advprop', 'noisy-student']: # standard weights
+        settings = encoders[encoder_name]["pretrained_settings"]
+        if pretrained not in settings.keys():
+            raise ValueError("Avaliable pretrained options {}".format(settings.keys()))
+        formatted_settings = {}
+        formatted_settings["input_space"] = settings[pretrained].get("input_space")
+        formatted_settings["input_range"] = settings[pretrained].get("input_range")
+        formatted_settings["mean"] = settings[pretrained].get("mean")
+        formatted_settings["std"] = settings[pretrained].get("std")
+        return formatted_settings
+    else: # use CheXpert settings
+        formatted_settings = {}
+        formatted_settings["input_space"] = 'RGB'
+        formatted_settings["input_range"] = [0, 1]
+        formatted_settings["mean"] = [.5020, .5020, .5020]
+        formatted_settings["std"] = [.085585, .085585, .085585]
+        return formatted_settings
 
 
 def get_preprocessing_fn(encoder_name, pretrained="imagenet"):

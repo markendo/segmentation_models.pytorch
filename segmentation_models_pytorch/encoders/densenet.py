@@ -85,6 +85,14 @@ class DenseNetEncoder(DenseNet, EncoderMixin):
         return features
 
     def load_state_dict(self, state_dict):
+
+        # state_dict = state_dict['state_dict']
+
+        # for key in list(state_dict.keys()):
+        #     new_key = key.replace('model.model.', '')
+        #     state_dict[new_key] = state_dict[key]
+        #     del state_dict[key]
+
         pattern = re.compile(
             r"^(.*denselayer\d+\.(?:norm|relu|conv))\.((?:[12])\.(?:weight|bias|running_mean|running_var))$"
         )

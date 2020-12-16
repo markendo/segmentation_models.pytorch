@@ -3,17 +3,18 @@ import torch
 from tqdm import tqdm as tqdm
 from .meter import AverageValueMeter
 
+import numpy as np
 
 class Epoch:
 
-    def __init__(self, model, loss, metrics, stage_name, device='cpu', verbose=True):
+    def __init__(self, model, loss, metrics, stage_name, device='cpu', num_channels=1, verbose=True):
         self.model = model
         self.loss = loss
         self.metrics = metrics
         self.stage_name = stage_name
         self.verbose = verbose
+        self.num_channels = num_channels
         self.device = device
-
         self._to_device()
 
     def _to_device(self):
@@ -23,7 +24,7 @@ class Epoch:
             metric.to(self.device)
 
     def _format_logs(self, logs):
-        str_logs = ['{} - {:.4}'.format(k, v) for k, v in logs.items()]
+        str_logs = ['{} - {:.4}'.format(k, v) for k, v in logs.items() if k != 'my_iou_score']
         s = ', '.join(str_logs)
         return s
 
@@ -39,7 +40,16 @@ class Epoch:
 
         logs = {}
         loss_meter = AverageValueMeter()
-        metrics_meters = {metric.__name__: AverageValueMeter() for metric in self.metrics}
+        metrics_meters = {}
+        print(self.num_channels)
+        for metric in self.metrics:
+            if metric.__name__ == 'my_iou_score':
+                metrics_meters[metric.__name__] = (np.zeros(self.num_channels), np.zeros(self.num_channels))
+            else:
+                if metric.task:
+                    metrics_meters[metric.__name__ + '_' + metric.task] = AverageValueMeter()       
+                else:
+                    metrics_meters[metric.__name__] = AverageValueMeter()
 
         with tqdm(dataloader, desc=self.stage_name, file=sys.stdout, disable=not (self.verbose)) as iterator:
             for x, y in iterator:
@@ -54,9 +64,19 @@ class Epoch:
 
                 # update metrics logs
                 for metric_fn in self.metrics:
-                    metric_value = metric_fn(y_pred, y).cpu().detach().numpy()
-                    metrics_meters[metric_fn.__name__].add(metric_value)
-                metrics_logs = {k: v.mean for k, v in metrics_meters.items()}
+                    if metric_fn.__name__ == 'my_iou_score':
+                        metric_value = metric_fn(y_pred, y, metrics_meters[metric_fn.__name__])
+                        metrics_meters[metric_fn.__name__] = metric_value
+                    else:
+                        metric_value = metric_fn(y_pred, y).cpu().detach().numpy()
+                        if metric_fn.task:
+                            metrics_meters[metric_fn.__name__ + '_' + metric_fn.task].add(metric_value)
+                        else:
+                            metrics_meters[metric_fn.__name__].add(metric_value)
+                if 'my_iou_score' in metrics_meters:
+                    iou_metric = {'my_iou_score': metrics_meters['my_iou_score']}
+                    logs.update(iou_metric)
+                metrics_logs = {k: v.mean for k, v in metrics_meters.items() if k != 'my_iou_score'}
                 logs.update(metrics_logs)
 
                 if self.verbose:
@@ -68,13 +88,14 @@ class Epoch:
 
 class TrainEpoch(Epoch):
 
-    def __init__(self, model, loss, metrics, optimizer, device='cpu', verbose=True):
+    def __init__(self, model, loss, metrics, optimizer, device='cpu', num_channels=1, verbose=True):
         super().__init__(
             model=model,
             loss=loss,
             metrics=metrics,
             stage_name='train',
             device=device,
+            num_channels=num_channels,
             verbose=verbose,
         )
         self.optimizer = optimizer
@@ -93,13 +114,14 @@ class TrainEpoch(Epoch):
 
 class ValidEpoch(Epoch):
 
-    def __init__(self, model, loss, metrics, device='cpu', verbose=True):
+    def __init__(self, model, loss, metrics, device='cpu', num_channels=1, verbose=True):
         super().__init__(
             model=model,
             loss=loss,
             metrics=metrics,
             stage_name='valid',
             device=device,
+            num_channels=num_channels,
             verbose=verbose,
         )
 
