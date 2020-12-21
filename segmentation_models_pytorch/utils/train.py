@@ -41,7 +41,6 @@ class Epoch:
         logs = {}
         loss_meter = AverageValueMeter()
         metrics_meters = {}
-        print(self.num_channels)
         for metric in self.metrics:
             if metric.__name__ == 'my_iou_score':
                 metrics_meters[metric.__name__] = (np.zeros(self.num_channels), np.zeros(self.num_channels))
