@@ -17,6 +17,16 @@ def _threshold(x, threshold=None):
     else:
         return x
 
+def _taskwise_threshold(x, thresholds):
+    thresholds_tensor = torch.FloatTensor(thresholds).to(device='cuda')
+    x_sub = x - thresholds_tensor[None,:,None,None]
+    return _threshold(x_sub, threshold=0)
+
+def _mask_thresholds(x, thresholds):
+    thresholds_tensor = torch.FloatTensor(thresholds).to(device='cuda')
+    x_dup = x.repeat(len(thresholds),1,1,1,1)
+    x_sub = x_dup - thresholds_tensor[:, None, None, None, None]
+    return _threshold(x_sub, threshold=0)
 
 def iou(pr, gt, eps=1e-7, threshold=None, ignore_channels=None):
     """Calculate Intersection over Union between ground truth and prediction
@@ -37,21 +47,50 @@ def iou(pr, gt, eps=1e-7, threshold=None, ignore_channels=None):
     # print("Iou:", ((intersection + eps) / union).cpu().detach().numpy(), "Intersection:", intersection.cpu().detach().numpy(), "Union:", union.cpu().detach().numpy())
     return (intersection + eps) / union
 
-def my_iou(pr, gt, iou, threshold=None):
-    """Calculate Intersection over Union between ground truth and prediction
+def iou_taskwise_thresholds(pr, gt, iou, thresholds):
+    """
+    Calculate Intersection over Union between ground truth and prediction
+    y_pr masked using thresholds list, which contains optimal threshold
+    for each class
+
     Args:
         pr (torch.Tensor): predicted tensor
         gt (torch.Tensor):  ground truth tensor
-        eps (float): epsilon to avoid zero division
+        thresholds (list): class-specific threshold to mask y_[r]
     Returns:
         float: IoU (Jaccard) score
     """
-    pr = _threshold(pr, threshold=threshold)
-    # print(pr.size(), gt.size())
+    pr = _taskwise_threshold(pr, thresholds)
     intersection = torch.sum(gt * pr, dim=(0, 2, 3)).cpu().detach().numpy()
     union = torch.sum(gt, dim=(0, 2, 3)).cpu().detach().numpy() + torch.sum(pr, dim=(0, 2, 3)).cpu().detach().numpy() - intersection
-    # print("intersection:", intersection, "union:", union)
     return (iou[0] + intersection, iou[1] + union)
+
+def my_iou(pr, gt, iou, thresholds, threshold=None):
+    """
+    Calculate Intersection over Union between ground truth and prediction
+    iou calculated for all possible y_pr mask thresholds in thresholds. Caller function
+    can then pick best iou for each class
+
+    Args:
+        pr (torch.Tensor): predicted tensor
+        gt (torch.Tensor):  ground truth tensor
+        thresholds (list): different thresholds to mask y_pr
+    Returns:
+        float: IoU (Jaccard) score
+    """
+    # single threshold
+    # pr = _threshold(pr, threshold=threshold)
+    # intersection = torch.sum(gt * pr, dim=(0, 2, 3)).cpu().detach().numpy()
+    # union = torch.sum(gt, dim=(0, 2, 3)).cpu().detach().numpy() + torch.sum(pr, dim=(0, 2, 3)).cpu().detach().numpy() - intersection
+    # # print("intersection:", intersection, "union:", union)
+    # return (iou[0] + intersection, iou[1] + union)
+
+    # try out all thresholds in thresholds array
+    pr = _mask_thresholds(pr, thresholds)
+    gt = gt.repeat(len(thresholds),1,1,1,1)
+    intersection = torch.sum(gt * pr, dim=(1, 3, 4)).cpu().detach().numpy()
+    union = torch.sum(gt, dim=(1, 3, 4)).cpu().detach().numpy() + torch.sum(pr, dim=(1, 3, 4)).cpu().detach().numpy() - intersection
+    return iou[0] + intersection, iou[1] + union
 
 
 jaccard = iou

@@ -7,7 +7,8 @@ import numpy as np
 
 class Epoch:
 
-    def __init__(self, model, loss, metrics, stage_name, device='cpu', num_channels=1, verbose=True):
+    def __init__(self, model, loss, metrics, stage_name, device='cpu', num_channels=1, verbose=True,
+                 thresholds=None):
         self.model = model
         self.loss = loss
         self.metrics = metrics
@@ -16,15 +17,16 @@ class Epoch:
         self.num_channels = num_channels
         self.device = device
         self._to_device()
+        self.thresholds = thresholds
 
     def _to_device(self):
         self.model.to(self.device)
         self.loss.to(self.device)
-        for metric in self.metrics:
+        for metric in self.metrics or []:
             metric.to(self.device)
 
     def _format_logs(self, logs):
-        str_logs = ['{} - {:.4}'.format(k, v) for k, v in logs.items() if k != 'my_iou_score']
+        str_logs = ['{} - {:.4}'.format(k, v) for k, v in logs.items() if (k != 'my_iou_score' and k != 'iou_thresh_score')]
         s = ', '.join(str_logs)
         return s
 
@@ -41,8 +43,14 @@ class Epoch:
         logs = {}
         loss_meter = AverageValueMeter()
         metrics_meters = {}
-        for metric in self.metrics:
+        # handle when there are no metrics
+        for metric in self.metrics or []:
+            # used during training and validation to find best thresholds
             if metric.__name__ == 'my_iou_score':
+                metrics_meters[metric.__name__] = (np.zeros((len(self.thresholds), self.num_channels)), 
+                                                   np.zeros((len(self.thresholds), self.num_channels)))
+            # used during testing when best thresholds have been found                                       
+            elif metric.__name__ == 'iou_thresh_score':
                 metrics_meters[metric.__name__] = (np.zeros(self.num_channels), np.zeros(self.num_channels))
             else:
                 if metric.task:
@@ -62,9 +70,9 @@ class Epoch:
                 logs.update(loss_logs)
 
                 # update metrics logs
-                for metric_fn in self.metrics:
-                    if metric_fn.__name__ == 'my_iou_score':
-                        metric_value = metric_fn(y_pred, y, metrics_meters[metric_fn.__name__])
+                for metric_fn in self.metrics or []:
+                    if metric_fn.__name__ == 'my_iou_score' or metric_fn.__name__ == 'iou_thresh_score':
+                        metric_value = metric_fn(y_pred, y, metrics_meters[metric_fn.__name__], self.thresholds)
                         metrics_meters[metric_fn.__name__] = metric_value
                     else:
                         metric_value = metric_fn(y_pred, y).cpu().detach().numpy()
@@ -75,7 +83,10 @@ class Epoch:
                 if 'my_iou_score' in metrics_meters:
                     iou_metric = {'my_iou_score': metrics_meters['my_iou_score']}
                     logs.update(iou_metric)
-                metrics_logs = {k: v.mean for k, v in metrics_meters.items() if k != 'my_iou_score'}
+                elif 'iou_thresh_score' in metrics_meters:
+                    iou_metric = {'iou_thresh_score': metrics_meters['iou_thresh_score']}
+                    logs.update(iou_metric)
+                metrics_logs = {k: v.mean for k, v in metrics_meters.items() if (k != 'my_iou_score' and k != 'iou_thresh_score')}
                 logs.update(metrics_logs)
 
                 if self.verbose:
@@ -87,7 +98,7 @@ class Epoch:
 
 class TrainEpoch(Epoch):
 
-    def __init__(self, model, loss, metrics, optimizer, device='cpu', num_channels=1, verbose=True):
+    def __init__(self, model, loss, metrics, optimizer, thresholds, device='cpu', num_channels=1, verbose=True):
         super().__init__(
             model=model,
             loss=loss,
@@ -96,6 +107,7 @@ class TrainEpoch(Epoch):
             device=device,
             num_channels=num_channels,
             verbose=verbose,
+            thresholds=thresholds,
         )
         self.optimizer = optimizer
 
@@ -113,7 +125,7 @@ class TrainEpoch(Epoch):
 
 class ValidEpoch(Epoch):
 
-    def __init__(self, model, loss, metrics, device='cpu', num_channels=1, verbose=True):
+    def __init__(self, model, loss, metrics, thresholds, device='cpu', num_channels=1, verbose=True):
         super().__init__(
             model=model,
             loss=loss,
@@ -122,6 +134,7 @@ class ValidEpoch(Epoch):
             device=device,
             num_channels=num_channels,
             verbose=verbose,
+            thresholds=thresholds,
         )
 
     def on_epoch_start(self):

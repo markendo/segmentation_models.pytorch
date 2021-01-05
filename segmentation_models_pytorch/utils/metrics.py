@@ -26,18 +26,37 @@ class IoU(base.Metric):
 
 class MyIoU(base.Metric):
     __name__ = 'my_iou_score'
-    def __init__(self, eps=1e-7, threshold=0.5, activation=None, **kwargs):
+    def __init__(self, eps=1e-7, threshold=0.5, activation=None,
+                 thresholds=None, **kwargs):
         super().__init__(**kwargs)
         self.eps = eps
         self.threshold = threshold
         self.activation = Activation(activation)
+        self.thresholds = thresholds
             
 
-    def forward(self, y_pr, y_gt, iou):
+    def forward(self, y_pr, y_gt, iou, thresholds):
+        if thresholds != self.thresholds:
+            raise Error('Thresholds in epoch and metric must match')
         y_pr = self.activation(y_pr)
         return F.my_iou(
-            y_pr, y_gt, iou,
+            y_pr, y_gt, iou, thresholds,
             threshold=self.threshold,
+        )
+
+class IoUWithThresholds(base.Metric):
+    __name__ = 'iou_thresh_score'
+    def __init__(self, thresholds, activation=None, **kwargs):
+        super().__init__(**kwargs)
+        self.thresholds = thresholds
+        self.activation = Activation(activation)
+    
+    def forward(self, y_pr, y_gt, iou, thresholds):
+        if thresholds != self.thresholds:
+            raise Error('Thresholds in epoch and metric must match')
+        y_pr = self.activation(y_pr)
+        return F.iou_taskwise_thresholds(
+            y_pr, y_gt, iou, thresholds,
         )
 
 
