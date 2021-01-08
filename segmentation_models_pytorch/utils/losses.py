@@ -55,11 +55,42 @@ class MyDiceLoss(base.Loss):
 
     def forward(self, y_pr, y_gt, smooth=1):
         #Class Averaged Dice
+        y_pr = self.activation(y_pr)
+        intersection = (y_pr * y_gt).sum(dim=(0, 2, 3))
+        dice = (2.*intersection + smooth) / (y_pr.sum(dim=(0, 2, 3)) + y_gt.sum(dim=(0, 2, 3)) + smooth)
+        dice_average = dice.mean()
+        return 1 - dice_average
+
+        #Class averaged iou loss
+        # print(f"logits min: {torch.min(y_pr)}, max: {torch.max(y_pr)},  mean: {torch.mean(y_pr)}")
         # y_pr = self.activation(y_pr)
+        # print(f"sigmoid min: {torch.min(y_pr)}, max: {torch.max(y_pr)},  mean: {torch.mean(y_pr)}")   
         # intersection = (y_pr * y_gt).sum(dim=(0, 2, 3))
-        # dice = (2.*intersection + smooth) / (y_pr.sum(dim=(0, 2, 3)) + y_gt.sum(dim=(0, 2, 3)) + smooth)
-        # dice_average = dice.mean()
-        # return 1 - dice_average
+        # total = (y_pr + y_gt).sum(dim=(0, 2, 3))
+        # union = total - intersection
+        # IoU = (intersection + smooth) / (union + smooth)
+        # return 1 - IoU.mean()
+
+        #Class averaged focal loss
+        # alpha = 0.8
+        # gamma = 2
+        # y_pr = self.activation(y_pr)
+        # BCE = torch.nn.functional.binary_cross_entropy(y_pr, y_gt, reduction='none').mean(dim=(0, 2, 3))
+        # BCE_EXP = torch.exp(-BCE)
+        # focal_loss = (alpha * (1-BCE_EXP)**gamma * BCE).mean()       
+        # return focal_loss
+
+        #Class averaged focal tversky loss
+        # α = 0.7, 𝜷 = 0.3, γ = 3/4
+        # alpha, beta, gamma = (.7, .3, 3/4)
+        # alpha, beta, gamma = (.3, .9, 3/4)
+        # y_pr = self.activation(y_pr)
+        # tp = (y_pr * y_gt).sum(dim=(0, 2, 3))
+        # fp = ((1 - y_gt) * y_pr).sum(dim=(0, 2, 3))
+        # fn = (y_gt * (1-y_pr)).sum(dim=(0, 2, 3))
+        # tversky = (tp + smooth) / (tp + alpha*fp + beta*fn + smooth)
+        # focaltversky = (1 - tversky)**gamma
+        # return focaltversky.mean()    
 
         #Dice BCE
         # inputs = self.activation(y_pr)     
@@ -72,12 +103,24 @@ class MyDiceLoss(base.Loss):
         # return Dice_BCE
 
         #Dice
-        y_pr = self.activation(y_pr)
-        y_pr = y_pr.view(-1)
-        y_gt = y_gt.view(-1)
-        intersection = (y_pr * y_gt).sum()
-        dice = (2.*intersection + smooth)/(y_pr.sum() + y_gt.sum() + smooth)  
-        return 1 - dice
+        # print(f"logits min: {torch.min(y_pr)}, max: {torch.max(y_pr)},  mean: {torch.mean(y_pr)}")
+        # y_pr = self.activation(y_pr)
+        # print(f"sigmoid min: {torch.min(y_pr)}, max: {torch.max(y_pr)},  mean: {torch.mean(y_pr)}")
+        # y_pr = y_pr.view(-1)
+        # y_gt = y_gt.view(-1)
+        # intersection = (y_pr * y_gt).sum()
+        # dice = (2.*intersection + smooth)/(y_pr.sum() + y_gt.sum() + smooth)  
+        # return 1 - dice
+
+        #IOU Loss
+        # y_pr = self.activation(y_pr)    
+        # inputs = y_pr.view(-1)
+        # targets = y_gt.view(-1)
+        # intersection = (inputs * targets).sum()
+        # total = (inputs + targets).sum()
+        # union = total - intersection 
+        # IoU = (intersection + smooth)/(union + smooth)
+        # return 1 - IoU
 
 class BinaryCrossEntropyLoss(base.Loss):
 
