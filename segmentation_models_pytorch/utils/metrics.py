@@ -2,30 +2,8 @@ from . import base
 from . import functional as F
 from .base import Activation
 
-
 class IoU(base.Metric):
     __name__ = 'iou_score'
-
-    def __init__(self, eps=1e-7, threshold=0.5, activation=None, task=None, ignore_channels=None, **kwargs):
-        super().__init__(**kwargs)
-        self.eps = eps
-        self.threshold = threshold
-        self.activation = Activation(activation)
-        self.ignore_channels = ignore_channels
-        self.task = task
-            
-
-    def forward(self, y_pr, y_gt):
-        y_pr = self.activation(y_pr)
-        return F.iou(
-            y_pr, y_gt,
-            eps=self.eps,
-            threshold=self.threshold,
-            ignore_channels=self.ignore_channels,
-        )
-
-class MyIoU(base.Metric):
-    __name__ = 'my_iou_score'
     def __init__(self, eps=1e-7, threshold=0.5, activation=None,
                  thresholds=None, **kwargs):
         super().__init__(**kwargs)
@@ -39,7 +17,7 @@ class MyIoU(base.Metric):
         if thresholds != self.thresholds:
             raise Error('Thresholds in epoch and metric must match')
         y_pr = self.activation(y_pr)
-        return F.my_iou(
+        return F.iou(
             y_pr, y_gt, iou, thresholds,
             threshold=self.threshold,
         )
