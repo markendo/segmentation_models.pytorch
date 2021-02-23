@@ -4,6 +4,8 @@ from tqdm import tqdm as tqdm
 from .meter import AverageValueMeter
 
 import numpy as np
+import wandb
+import json
 
 class Epoch:
 
@@ -36,8 +38,7 @@ class Epoch:
     def on_epoch_start(self):
         pass
 
-    def run(self, dataloader):
-
+    def run(self, dataloader, valid_epoch=None, valid_loader=None, num_valid_per_epoch=None, max_score=None, classes=None, save_dir=None):
         self.on_epoch_start()
 
         logs = {}
@@ -58,6 +59,7 @@ class Epoch:
                 else:
                     metrics_meters[metric.__name__] = AverageValueMeter()
 
+        n_iter = 0
         with tqdm(dataloader, desc=self.stage_name, file=sys.stdout, disable=not (self.verbose)) as iterator:
             for x, y in iterator:
                 x, y = x.to(self.device), y.to(self.device)
@@ -89,11 +91,57 @@ class Epoch:
                 metrics_logs = {k: v.mean for k, v in metrics_meters.items() if (k != 'my_iou_score' and k != 'iou_thresh_score')}
                 logs.update(metrics_logs)
 
+                n_iter += 1
+                #check to run intermediate validation epoch
+                if valid_epoch:
+                    if n_iter % (len(dataloader) // num_valid_per_epoch) == 0:
+                        max_score = self.intermediate_valid_run(max_score, logs[self.loss.__name__], valid_epoch, valid_loader, classes, save_dir)
+                        logs.update({'max_score': max_score})
+
                 if self.verbose:
                     s = self._format_logs(logs)
                     iterator.set_postfix_str(s)
+                
+
+
+                # num_iter += 1
+                # if num_iter % 100 == 0:
+                    # if valid_epoch:
+                    #     valid_logs = valid_epoch.run(valid_loader)
+                    #     valid_ious = np.divide(valid_logs['my_iou_score'][0], valid_logs['my_iou_score'][1])
+                    #     valid_max_ious = np.amax(valid_ious, axis=0)
+                    #     valid_miou = np.mean(valid_max_ious)
+                    #     if valid_miou > best_score:
+                    #         valid_iou_logs = {CHEXPERT_SEGMENTATION_CLASSES[i]: valid_max_ious[i] for i in range(len(CHEXPERT_SEGMENTATION_CLASSES))}
+                    #         valid_iou_logs.update({'miou': valid_miou})
+                    #         print(valid_iou_logs)
+                    #         best_score = valid_miou
 
         return logs
+
+    def intermediate_valid_run(self, max_score, train_loss, valid_epoch, valid_loader, classes, save_dir):
+        valid_logs = valid_epoch.run(valid_loader)
+        valid_ious = np.divide(valid_logs['my_iou_score'][0], valid_logs['my_iou_score'][1])
+        valid_max_ious = np.amax(valid_ious, axis=0)
+        valid_max_ious_index = np.argmax(valid_ious, axis=0)
+        best_thresholds = [self.thresholds[num] for num in np.nditer(valid_max_ious_index)]
+        valid_miou = np.mean(valid_max_ious)
+        # logging
+        wandb_logs = {classes[i]: valid_max_ious[i] for i in range(len(classes))}
+        wandb_logs.update({"train loss": train_loss,
+                    "validation loss": valid_logs['distillation_loss'],
+                    "validation miou score": valid_miou,})
+        wandb.log(wandb_logs)
+        if max_score < valid_miou:
+            max_score = valid_miou
+            torch.save(self.model.state_dict(), save_dir / "distilled_model.pth")
+            with open(save_dir / "distilled_thresholds.txt", "w") as threshold_file:
+                json.dump(best_thresholds, threshold_file)
+                print("Best thresholds:", best_thresholds)
+            print('Model saved!')
+            print(wandb_logs)
+        self.on_epoch_start()
+        return max_score
 
 
 class TrainEpoch(Epoch):

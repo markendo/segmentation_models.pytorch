@@ -38,7 +38,21 @@ def get_encoder(name, in_channels=3, depth=5, weights=None):
     encoder = Encoder(**params)
 
     if weights is not None:
-        if weights not in ['imagenet', 'ssl', 'swsl', 'instagram', 'advprop', 'noisy-student']: #custom encoder weights
+        if '/deep/group/aihc-bootcamp-spring2020/cxr_fewer_samples/experiments/ntruongv/' in weights: #moco weights
+            state_dict = torch.load(weights)
+            state_dict = state_dict['state_dict']
+            for key in list(state_dict.keys()):
+                if 'encoder_q' in key: # discard encoder_k, only use query not key
+                    new_key = key.replace('module.encoder_q.', '')
+                    state_dict[new_key] = state_dict[key]
+                del state_dict[key]
+            state_dict['fc.bias'] = 0
+            state_dict['fc.weight'] = 0
+            del state_dict['fc.0.weight']
+            del state_dict['fc.0.bias']
+            del state_dict['fc.2.weight']
+            del state_dict['fc.2.bias']
+        elif weights not in ['imagenet', 'ssl', 'swsl', 'instagram', 'advprop', 'noisy-student']: #chexpert weights
             state_dict = torch.load(weights)
             state_dict = state_dict['state_dict']
             for key in list(state_dict.keys()):
@@ -59,9 +73,7 @@ def get_encoder_names():
 
 
 def get_preprocessing_params(encoder_name, pretrained="imagenet"):
-    if pretrained is None:
-        raise ValueError("Must have encoder weights")
-    elif pretrained in ['imagenet', 'ssl', 'swsl', 'instagram', 'advprop', 'noisy-student']: # standard weights
+    if pretrained in ['imagenet', 'ssl', 'swsl', 'instagram', 'advprop', 'noisy-student']: # standard weights
         settings = encoders[encoder_name]["pretrained_settings"]
         if pretrained not in settings.keys():
             raise ValueError("Avaliable pretrained options {}".format(settings.keys()))
