@@ -19,7 +19,6 @@ class IoU(base.Metric):
         y_pr = self.activation(y_pr)
         return F.iou(
             y_pr, y_gt, iou, thresholds,
-            threshold=self.threshold,
         )
 
 class IoUWithThresholds(base.Metric):
