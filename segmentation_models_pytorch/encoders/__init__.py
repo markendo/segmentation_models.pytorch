@@ -38,7 +38,7 @@ def get_encoder(name, in_channels=3, depth=5, weights=None, weights_type=None):
     encoder = Encoder(**params)
 
     if weights is not None:
-        if weights_type = 'MoCoCXR': #moco weights
+        if weights_type == 'MoCoCXR': #moco weights
             state_dict = torch.load(weights)
             state_dict = state_dict['state_dict']
             for key in list(state_dict.keys()):
@@ -52,7 +52,7 @@ def get_encoder(name, in_channels=3, depth=5, weights=None, weights_type=None):
             del state_dict['fc.0.bias']
             del state_dict['fc.2.weight']
             del state_dict['fc.2.bias']
-        elif weights_type = 'CheXpert': #chexpert weights
+        elif weights_type == 'CheXpert': #chexpert weights
             state_dict = torch.load(weights)
             state_dict = state_dict['state_dict']
             for key in list(state_dict.keys()):
