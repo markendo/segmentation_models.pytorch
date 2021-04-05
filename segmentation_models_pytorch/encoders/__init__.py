@@ -31,14 +31,14 @@ encoders.update(xception_encoders)
 encoders.update(timm_efficientnet_encoders)
 
 
-def get_encoder(name, in_channels=3, depth=5, weights=None):
+def get_encoder(name, in_channels=3, depth=5, weights=None, weights_type=None):
     Encoder = encoders[name]["encoder"]
     params = encoders[name]["params"]
     params.update(depth=depth)
     encoder = Encoder(**params)
 
     if weights is not None:
-        if '/deep/group/aihc-bootcamp-spring2020/cxr_fewer_samples/experiments/ntruongv/' in weights: #moco weights
+        if weights_type = 'MoCoCXR': #moco weights
             state_dict = torch.load(weights)
             state_dict = state_dict['state_dict']
             for key in list(state_dict.keys()):
@@ -52,7 +52,7 @@ def get_encoder(name, in_channels=3, depth=5, weights=None):
             del state_dict['fc.0.bias']
             del state_dict['fc.2.weight']
             del state_dict['fc.2.bias']
-        elif weights not in ['imagenet', 'ssl', 'swsl', 'instagram', 'advprop', 'noisy-student']: #chexpert weights
+        elif weights_type = 'CheXpert': #chexpert weights
             state_dict = torch.load(weights)
             state_dict = state_dict['state_dict']
             for key in list(state_dict.keys()):

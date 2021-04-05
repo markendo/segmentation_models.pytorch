@@ -40,6 +40,7 @@ class DeepLabV3(SegmentationModel):
             encoder_name: str = "resnet34",
             encoder_depth: int = 5,
             encoder_weights: Optional[str] = "imagenet",
+            encoder_weights_type: Optional[str] = "",
             decoder_channels: int = 256,
             in_channels: int = 3,
             classes: int = 1,
@@ -54,6 +55,7 @@ class DeepLabV3(SegmentationModel):
             in_channels=in_channels,
             depth=encoder_depth,
             weights=encoder_weights,
+            weights_type=encoder_weights_type
         )
         self.encoder.make_dilated(
             stage_list=[4, 5],
@@ -133,6 +135,7 @@ Convolution for Semantic Image Segmentation"
             in_channels=in_channels,
             depth=encoder_depth,
             weights=encoder_weights,
+            weights_type=encoder_weights_type
         )
 
         if encoder_output_stride == 8:
