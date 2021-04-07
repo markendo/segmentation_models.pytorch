@@ -95,7 +95,7 @@ class Epoch:
                 if valid_epoch:
                     if n_iter % (len(dataloader) // num_valid_per_epoch) == 0:
                         max_score = self.intermediate_valid_run(max_score, logs[self.loss.__name__], valid_epoch, valid_loader, classes, save_dir)
-                        logs.update({'max_score': max_score})
+                        logs.update({'max_score': float(max_score)})
 
                 if self.verbose:
                     s = self._format_logs(logs)
