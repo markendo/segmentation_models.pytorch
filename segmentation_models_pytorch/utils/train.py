@@ -38,7 +38,7 @@ class Epoch:
     def on_epoch_start(self):
         pass
 
-    def run(self, dataloader, valid_epoch=None, valid_loader=None, num_valid_per_epoch=None, max_score=None, classes=None, save_dir=None):
+    def run(self, dataloader, valid_epoch=None, valid_loader=None, num_valid_per_epoch=None, max_score=None, classes=None, save_dir=None, valid_common_pathologies=None):
         self.on_epoch_start()
 
         logs = {}
@@ -94,7 +94,7 @@ class Epoch:
                 n_iter += 1
                 if valid_epoch:
                     if n_iter % (len(dataloader) // num_valid_per_epoch) == 0:
-                        max_score = self.intermediate_valid_run(max_score, logs[self.loss.__name__], valid_epoch, valid_loader, classes, save_dir)
+                        max_score = self.intermediate_valid_run(max_score, logs[self.loss.__name__], valid_epoch, valid_loader, classes, save_dir, valid_common_pathologies, logs)
                         logs.update({'max_score': float(max_score)})
 
                 if self.verbose:
@@ -102,12 +102,23 @@ class Epoch:
                     iterator.set_postfix_str(s)
         return logs
 
-    def intermediate_valid_run(self, max_score, train_loss, valid_epoch, valid_loader, classes, save_dir):
+    def intermediate_valid_run(self, max_score, train_loss, valid_epoch, valid_loader, classes, save_dir, valid_common_pathologies, train_logs):
         valid_logs = valid_epoch.run(valid_loader)
         valid_ious = np.divide(valid_logs['iou_score'][0], valid_logs['iou_score'][1])
         valid_max_ious = np.amax(valid_ious, axis=0)
-        valid_max_ious_index = np.argmax(valid_ious, axis=0)
-        best_thresholds = [self.thresholds[num] for num in np.nditer(valid_max_ious_index)]
+        if valid_common_pathologies:
+            common_pathologies_ious = np.zeros(len(valid_common_pathologies))
+            for common_pathology_index, pathology in enumerate(valid_common_pathologies):
+                max_iou_index = classes.index(pathology)
+                common_pathologies_ious[common_pathology_index] = valid_max_ious[max_iou_index]
+            common_pathologies_miou = np.mean(common_pathologies_ious)
+            # to find best thresholding, must use train set since validation set doesn't have most pathologies present
+            train_ious = np.divide(train_logs['iou_score'][0], train_logs['iou_score'][1])
+            train_max_ious_index = np.argmax(train_ious, axis=0)
+            best_thresholds = [iou_thresholds[num] for num in np.nditer(train_max_ious_index)]
+        else:
+            valid_max_ious_index = np.argmax(valid_ious, axis=0)
+            best_thresholds = [self.thresholds[num] for num in np.nditer(valid_max_ious_index)]
         valid_miou = np.mean(valid_max_ious)
         # logging
         wandb_logs = {classes[i]: valid_max_ious[i] for i in range(len(classes))}
@@ -115,14 +126,22 @@ class Epoch:
                     "validation loss": valid_logs['distillation_loss'],
                     "validation miou score": valid_miou,})
         wandb.log(wandb_logs)
-        if max_score < valid_miou:
-            max_score = valid_miou
-            torch.save(self.model.state_dict(), save_dir / "distilled_model.pth")
-            with open(save_dir / "distilled_thresholds.txt", "w") as threshold_file:
-                json.dump(best_thresholds, threshold_file)
-                print("Best thresholds:", best_thresholds)
-            print('Model saved!')
-            print(wandb_logs)
+
+        if valid_common_pathologies:
+            if max_score < common_pathologies_miou:
+                max_score = common_pathologies_miou
+                torch.save(self.model.state_dict(), save_dir / "distilled_model.pth")
+                with open(save_dir / "distilled_thresholds.txt", "w") as threshold_file:
+                    json.dump(best_thresholds, threshold_file)
+                print(f'Model saved with performance of {common_pathologies_miou} on common pathologies!')
+        else:
+            if max_score < valid_miou:
+                max_score = valid_miou
+                torch.save(self.model.state_dict(), save_dir / "distilled_model.pth")
+                with open(save_dir / "distilled_thresholds.txt", "w") as threshold_file:
+                    json.dump(best_thresholds, threshold_file)
+                    # print("Best thresholds:", best_thresholds)
+                print(f'Model saved with performance of {valid_miou}!')
         self.on_epoch_start()
         return max_score
 
