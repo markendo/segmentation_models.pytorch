@@ -103,6 +103,7 @@ class Epoch:
         return logs
 
     def intermediate_valid_run(self, max_score, train_loss, valid_epoch, valid_loader, classes, save_dir, valid_common_pathologies, train_logs):
+        print(train_logs)
         valid_logs = valid_epoch.run(valid_loader)
         valid_ious = np.divide(valid_logs['iou_score'][0], valid_logs['iou_score'][1])
         valid_max_ious = np.amax(valid_ious, axis=0)
