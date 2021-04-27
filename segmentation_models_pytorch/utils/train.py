@@ -40,7 +40,6 @@ class Epoch:
 
     def run(self, dataloader, valid_epoch=None, valid_loader=None, num_valid_per_epoch=None, max_score=None, classes=None, save_dir=None, valid_common_pathologies=None):
         self.on_epoch_start()
-        print("THIS IS A TEST FOR DEPENDENCIES")
         logs = {}
         loss_meter = AverageValueMeter()
         metrics_meters = {}
